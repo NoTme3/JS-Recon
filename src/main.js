@@ -289,6 +289,8 @@
     // ─── CORS-safe fetch helper ───
     const FETCH_STRATEGIES = [
       u => u,
+      u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+      u => `https://cors.eu.org/${u}`,
       u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
       u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
     ];
