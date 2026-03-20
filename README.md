@@ -29,7 +29,7 @@ Since JS Recon Analyzer runs entirely client-side, there are no heavy backends o
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/js-recon-analyzer.git
+   git clone https://github.com/NoTme3/JS-Recon.git
    cd js-recon-analyzer
    ```
 2. Simply open `index.html` in your favorite modern browser:
