@@ -19,7 +19,8 @@ It runs **100% locally** in your browser, ensuring that your target code and dis
   - Uses AST analysis (`acorn`) to trace dangerous DOM sinks (`innerHTML`, `eval`) and source-map parsing to recover original source code.
   - Dynamically runs scripts in an isolated sandbox (`⚡ Dynamic`) to extract dynamically generated variables and endpoints.
 - **Exploit Guidance**: Identifies potential client-side vulnerabilities alongside remediation advice, payload examples, and severity badges (Critical, High, Medium, Low).
-- **Premium Bento-Box UI**: Features a gorgeous, completely revamped "SaaS-style" bento grid layout with dark-mode aesthetic, micro-animations, and ambient glowing backgrounds.
+- **Workspaces & Local Persistence**: Automatically saves your analysis sessions, parsed scripts, and security findings directly to your browser offline using `IndexedDB`. You can seamlessly rename scripts, delete old sessions, and organize multiple targets simultaneously.
+- **Premium Glassmorphism UI**: Features a gorgeous, completely revamped "SaaS-style" layout featuring an interactive bento grid, floating frosted glass sidebars, dynamic scrolling headers, Tokyo-Night styled code editors, and custom in-app glass modals—completely eliminating ugly native browser prompts.
 - **Built-in Editor**: Complete with a JS `Beautify` integration and smart code-highlighting precisely where your matches occur.
 - **Export Ready**: Export your entire recon session effortlessly to JSON, CSV, or HTML reports.
 
@@ -45,7 +46,8 @@ Since JS Recon Analyzer runs entirely client-side, there are no heavy backends o
 - **Web Workers / Sandbox IFrames**: Safely executes dynamic script analysis without jeopardizing the security of the main application.
 
 ### Core Modules
-* `main.js` - UI Orchestration & Event Handling
+* `main.js` - UI Orchestration, Modals, & Event Handling
+* `workspace-store.js` - IndexedDB-backed Local Storage for cross-session Workspaces
 * `patterns.js` - Hand-crafted regex definitions for hunting secrets & APIs 
 * `ast-analyzer.js` - Abstract Syntax Tree parsing and DOM sink tracing
 * `dynamic-sandbox.js` - Safely executes code in a sandboxed iframe environment
