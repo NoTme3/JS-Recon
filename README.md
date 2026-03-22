@@ -1,4 +1,4 @@
-[README.md](https://github.com/user-attachments/files/26132896/README.md)
+(https://github.com/user-attachments/files/26132896/README.md)
 <div align="center">
   <h1>🔍 JS Recon Analyzer </h1>
   <p><b>A modern, client-side JavaScript analyzer for extracting secrets, endpoints, vulnerabilities, and more directly in your browser.</b></p>
