@@ -155,8 +155,98 @@
     if (onProgress) onProgress(1);
   }
 
-  // ─── DOM READY ───
+  // =========================================================================
+  // BOOTSTRAP APP
+  // =========================================================================
   document.addEventListener('DOMContentLoaded', () => {
+
+    // ─── Custom UI Prompt ───
+    window.customPrompt = function(title, defaultValue = '') {
+      return new Promise((resolve) => {
+        const modal = document.getElementById('prompt-modal');
+        const titleEl = document.getElementById('prompt-title');
+        const inputEl = document.getElementById('prompt-input');
+        const closeBtn = document.getElementById('close-prompt');
+        const cancelBtn = document.getElementById('cancel-prompt');
+        const submitBtn = document.getElementById('submit-prompt');
+  
+        titleEl.textContent = title;
+        inputEl.value = defaultValue;
+        modal.classList.remove('hidden');
+        inputEl.focus();
+        inputEl.select();
+  
+        const cleanup = () => {
+          modal.classList.add('hidden');
+          closeBtn.removeEventListener('click', onCancel);
+          cancelBtn.removeEventListener('click', onCancel);
+          submitBtn.removeEventListener('click', onSubmit);
+          inputEl.removeEventListener('keydown', onKey);
+        };
+  
+        const onCancel = () => { cleanup(); resolve(null); };
+        const onSubmit = () => { cleanup(); resolve(inputEl.value.trim() || null); };
+        const onKey = (e) => {
+          if (e.key === 'Enter') onSubmit();
+          if (e.key === 'Escape') onCancel();
+        };
+  
+        closeBtn.addEventListener('click', onCancel);
+        cancelBtn.addEventListener('click', onCancel);
+        submitBtn.addEventListener('click', onSubmit);
+        inputEl.addEventListener('keydown', onKey);
+      });
+    };
+
+    // ─── Custom UI Confirm ───
+    window.customConfirm = function(message) {
+      return new Promise((resolve) => {
+        const modal = document.getElementById('confirm-modal');
+        const msgEl = document.getElementById('confirm-message');
+        const closeBtn = document.getElementById('close-confirm');
+        const cancelBtn = document.getElementById('cancel-confirm');
+        const submitBtn = document.getElementById('submit-confirm');
+  
+        msgEl.textContent = message;
+        modal.classList.remove('hidden');
+  
+        const cleanup = () => {
+          modal.classList.add('hidden');
+          closeBtn.removeEventListener('click', onCancel);
+          cancelBtn.removeEventListener('click', onCancel);
+          submitBtn.removeEventListener('click', onSubmit);
+        };
+  
+        const onCancel = () => { cleanup(); resolve(false); };
+        const onSubmit = () => { cleanup(); resolve(true); };
+  
+        closeBtn.addEventListener('click', onCancel);
+        cancelBtn.addEventListener('click', onCancel);
+        submitBtn.addEventListener('click', onSubmit);
+      });
+    };
+
+    // ─── Custom UI Alert ───
+    window.customAlert = function(message) {
+      return new Promise((resolve) => {
+        const modal = document.getElementById('alert-modal');
+        const msgEl = document.getElementById('alert-message');
+        const closeBtn = document.getElementById('close-alert');
+  
+        msgEl.textContent = message;
+        modal.classList.remove('hidden');
+  
+        const cleanup = () => {
+          modal.classList.add('hidden');
+          closeBtn.removeEventListener('click', onCancel);
+        };
+  
+        const onCancel = () => { cleanup(); resolve(); };
+        closeBtn.addEventListener('click', onCancel);
+      });
+    };
+
+    // DOM Elements
     const dropZone = document.getElementById('drop-zone');
     const fileInput = document.getElementById('file-input');
     const resultsSection = document.getElementById('results-section');
@@ -315,7 +405,7 @@
     if (fetchUrlBtn) {
       fetchUrlBtn.addEventListener('click', async () => {
         const url = fetchUrlInput.value.trim();
-        if (!url) { alert('Please enter a valid JavaScript file URL.'); return; }
+        if (!url) { window.customAlert('Please enter a valid JavaScript file URL.'); return; }
         const originalHTML = fetchUrlBtn.innerHTML;
         fetchUrlBtn.innerHTML = 'Fetching...';
         fetchUrlBtn.disabled = true;
@@ -329,7 +419,7 @@
           await runAnalysis(text, shortName);
         } catch (e) {
           console.error('Fetch error:', e);
-          alert('Failed to fetch the URL.\n\nTry downloading the file manually and using drag & drop instead.');
+          window.customAlert('Failed to fetch the URL.\n\nTry downloading the file manually and using drag & drop instead.');
         } finally {
           fetchUrlBtn.innerHTML = originalHTML;
           fetchUrlBtn.disabled = false;
@@ -365,7 +455,7 @@
     if (analyzePasteBtn) {
       analyzePasteBtn.addEventListener('click', async () => {
         const text = codeInput.value.trim();
-        if (!text) { alert('Please paste some JavaScript code first.'); return; }
+        if (!text) { window.customAlert('Please paste some JavaScript code first.'); return; }
         fileNameDisplay.textContent = 'Pasted Code';
         await runAnalysis(text, 'pasted-code');
       });
@@ -376,8 +466,8 @@
     if (runDynamicBtn) {
       runDynamicBtn.addEventListener('click', async () => {
         const text = codeInput.value.trim();
-        if (!text) { alert('Please paste or upload code first.'); return; }
-        if (!JSA.runDynamic) { alert('Dynamic analysis module not loaded.'); return; }
+        if (!text) { window.customAlert('Please paste or upload code first.'); return; }
+        if (!JSA.runDynamic) { window.customAlert('Dynamic analysis module not loaded.'); return; }
 
         runDynamicBtn.disabled = true;
         runDynamicBtn.textContent = '⏳ Running...';
@@ -420,10 +510,10 @@
           if (dynContent) dynContent.classList.add('active');
 
           const msg = raw.timedOut ? 'Timed out — partial results shown' : `Found ${findings.length} runtime behaviors`;
-          alert(msg);
+          window.customAlert(msg);
         } catch (e) {
           console.error('Dynamic analysis error:', e);
-          alert('Dynamic analysis failed: ' + e.message);
+          window.customAlert('Dynamic analysis failed: ' + e.message);
         } finally {
           runDynamicBtn.disabled = false;
           runDynamicBtn.textContent = '⚡ Dynamic';
@@ -436,7 +526,7 @@
     async function handleFiles(files) {
       if (!files || files.length === 0) return;
       const valid = files.filter(f => f.name.endsWith('.js') || f.name.endsWith('.ts') || f.name.endsWith('.map') || f.type.includes('javascript'));
-      if (valid.length === 0) { alert('Please upload JavaScript (.js) or Source Map (.map) files.'); return; }
+      if (valid.length === 0) { window.customAlert('Please upload JavaScript (.js) or Source Map (.map) files.'); return; }
       fileNameDisplay.textContent = valid.length === 1 ? valid[0].name : `${valid.length} files loaded`;
 
       showProgress('Analyzing ' + valid.length + ' file(s)...');
@@ -506,9 +596,11 @@
         renderResults(GLOBAL_RESULTS);
         resultsSection.classList.remove('hidden');
         resultsSection.scrollIntoView({ behavior: 'smooth' });
+        // Auto-save to active workspace
+        await autoSaveAnalysis(fileNameDisplay.textContent, GLOBAL_RESULTS, allText);
       } catch (e) {
         console.error(e);
-        alert('Error analyzing files.');
+        window.customAlert('Error analyzing files.');
       } finally {
         hideProgress();
       }
@@ -527,9 +619,11 @@
         renderResults(GLOBAL_RESULTS);
         resultsSection.classList.remove('hidden');
         resultsSection.scrollIntoView({ behavior: 'smooth' });
+        // Auto-save to active workspace
+        await autoSaveAnalysis(fileName, GLOBAL_RESULTS, text);
       } catch (e) {
         console.error(e);
-        alert('Error analyzing code.');
+        window.customAlert('Error analyzing code.');
       } finally {
         dropZone.classList.remove('loading-pulse');
         hideProgress();
@@ -661,7 +755,7 @@
             span.textContent = span.dataset.decoded ? val : decoded;
             span.dataset.decoded = !span.dataset.decoded;
             e.currentTarget.textContent = span.dataset.decoded ? 'Encode' : 'Decode';
-          } catch (err) { alert('Failed to decode base64'); }
+          } catch (err) { window.customAlert('Failed to decode base64'); }
         });
       });
 
@@ -669,7 +763,7 @@
         btn.addEventListener('click', async e => {
           let val = e.currentTarget.getAttribute('data-val');
           if (val.startsWith('/')) {
-            const base = prompt('Enter base URL (e.g. https://api.example.com):');
+            const base = await window.customPrompt('Enter base URL (e.g. https://api.example.com):');
             if (!base) return;
             val = base + val;
           }
@@ -798,6 +892,312 @@
       modalClose.addEventListener('click', () => modal.classList.add('hidden'));
       modal.addEventListener('click', e => { if (e.target === modal) modal.classList.add('hidden'); });
     }
+
+    // ═══════════════════════════════════════════════════════
+    // WORKSPACE SIDEBAR
+    // ═══════════════════════════════════════════════════════
+
+    const appLayout = document.getElementById('app-layout');
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    const sidebarOpenBtn = document.getElementById('sidebar-open-btn');
+    const workspaceList = document.getElementById('workspace-list');
+    const newWorkspaceBtn = document.getElementById('new-workspace-btn');
+
+    let activeWorkspaceId = localStorage.getItem('jsa-active-workspace') || null;
+    let activeAnalysisId = null;
+    let sidebarOpen = localStorage.getItem('jsa-sidebar-open') !== 'false';
+
+    // Restore sidebar state
+    if (sidebarOpen) {
+      document.body.classList.add('sidebar-open');
+    } else {
+      document.body.classList.remove('sidebar-open');
+    }
+
+    // ─── Toggle sidebar (close from inside) ───
+    sidebarToggle.addEventListener('click', () => {
+      sidebarOpen = false;
+      document.body.classList.remove('sidebar-open');
+      localStorage.setItem('jsa-sidebar-open', 'false');
+    });
+
+    // ─── Toggle sidebar (from hamburger button — always visible) ───
+    sidebarOpenBtn.addEventListener('click', () => {
+      sidebarOpen = !sidebarOpen;
+      if (sidebarOpen) {
+        document.body.classList.add('sidebar-open');
+      } else {
+        document.body.classList.remove('sidebar-open');
+      }
+      localStorage.setItem('jsa-sidebar-open', String(sidebarOpen));
+    });
+
+    // ─── Header Scroll Animation ───
+    const topNav = document.getElementById('top-nav');
+    if (topNav) {
+      window.addEventListener('scroll', () => {
+        if (window.scrollY > 45) {
+          topNav.classList.add('hide-icons');
+        } else {
+          topNav.classList.remove('hide-icons');
+        }
+      });
+    }
+
+    // ─── Helper: relative time ───
+    function timeAgo(ts) {
+      const diff = Date.now() - ts;
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'just now';
+      if (mins < 60) return mins + 'm ago';
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return hrs + 'h ago';
+      const days = Math.floor(hrs / 24);
+      if (days < 30) return days + 'd ago';
+      return new Date(ts).toLocaleDateString();
+    }
+
+    // ─── Render sidebar ───
+    async function renderSidebar() {
+      if (!JSA.WorkspaceStore) return;
+
+      try {
+        const workspaces = await JSA.WorkspaceStore.listWorkspaces();
+
+        if (workspaces.length === 0) {
+          workspaceList.innerHTML = `
+            <div class="sidebar-empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              </svg>
+              <p>No workspaces yet</p>
+              <span>Create one to start organizing your analyses</span>
+            </div>`;
+          return;
+        }
+
+        let html = '';
+        for (const ws of workspaces) {
+          const isActive = ws.id === activeWorkspaceId;
+          const analyses = await JSA.WorkspaceStore.listAnalyses(ws.id);
+
+          html += `
+            <div class="ws-item ${isActive ? 'active expanded' : ''}" data-ws-id="${ws.id}">
+              <div class="ws-item-header" data-ws-id="${ws.id}">
+                <svg class="ws-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                <div class="ws-item-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                  </svg>
+                </div>
+                <div class="ws-item-info">
+                  <div class="ws-item-name">${escapeHtml(ws.name)}</div>
+                  <div class="ws-item-meta">${analyses.length} file${analyses.length !== 1 ? 's' : ''} · ${timeAgo(ws.updatedAt)}</div>
+                </div>
+                <div class="ws-item-actions">
+                  <button class="ws-action-btn ws-rename-btn" data-ws-id="${ws.id}" title="Rename">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                  </button>
+                  <button class="ws-action-btn danger ws-delete-btn" data-ws-id="${ws.id}" title="Delete">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="ws-analyses">
+                ${analyses.length === 0 ? '<div style="padding: 0.5rem 0.75rem 0.75rem 2.75rem; font-size: 0.625rem; color: var(--text-muted); font-style: italic;">No analyses yet</div>' : analyses.map(a => `
+                  <div class="ws-analysis-item ${a.id === activeAnalysisId ? 'active' : ''}" data-analysis-id="${a.id}" data-ws-id="${ws.id}">
+                    <div class="ws-analysis-info">
+                      <div class="ws-analysis-name">${escapeHtml(a.fileName)}</div>
+                    </div>
+                    <div class="ws-analysis-actions">
+                      <button class="ws-analysis-action-btn ws-analysis-rename" data-analysis-id="${a.id}" title="Rename analysis">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                      </button>
+                      <button class="ws-analysis-action-btn danger ws-analysis-delete" data-analysis-id="${a.id}" title="Delete analysis">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>`;
+        }
+
+        workspaceList.innerHTML = html;
+        attachSidebarEvents();
+      } catch (e) {
+        console.error('Sidebar render error:', e);
+      }
+    }
+
+    // ─── Attach sidebar event handlers ───
+    function attachSidebarEvents() {
+      // Click workspace header: toggle expand + set active
+      workspaceList.querySelectorAll('.ws-item-header').forEach(header => {
+        header.addEventListener('click', (e) => {
+          if (e.target.closest('.ws-action-btn')) return;
+          const wsId = header.dataset.wsId;
+          const item = header.closest('.ws-item');
+
+          // Toggle expand
+          item.classList.toggle('expanded');
+
+          // Set as active workspace
+          activeWorkspaceId = wsId;
+          localStorage.setItem('jsa-active-workspace', wsId);
+
+          // Update active state on all items
+          workspaceList.querySelectorAll('.ws-item').forEach(el => {
+            el.classList.toggle('active', el.dataset.wsId === wsId);
+          });
+
+          // Re-render to update active badges
+          renderSidebar();
+        });
+      });
+
+      // Rename workspace
+      workspaceList.querySelectorAll('.ws-rename-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const wsId = btn.dataset.wsId;
+          const wsNameEl = btn.closest('.ws-item').querySelector('.ws-item-name');
+          const currentName = wsNameEl ? wsNameEl.textContent : '';
+          const name = await window.customPrompt('Rename workspace:', currentName);
+          if (name && name.trim()) {
+            await JSA.WorkspaceStore.renameWorkspace(wsId, name.trim());
+            renderSidebar();
+          }
+        });
+      });
+
+      // Delete workspace
+      workspaceList.querySelectorAll('.ws-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const wsId = btn.dataset.wsId;
+          const isConfirmed = await window.customConfirm('Delete this workspace and all its analyses?');
+          if (!isConfirmed) return;
+          await JSA.WorkspaceStore.deleteWorkspace(wsId);
+          if (activeWorkspaceId === wsId) {
+            activeWorkspaceId = null;
+            localStorage.removeItem('jsa-active-workspace');
+          }
+          renderSidebar();
+        });
+      });
+
+      // Click analysis: set active / Delete / Rename
+      workspaceList.querySelectorAll('.ws-analysis-item').forEach(item => {
+        item.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const analysisId = item.dataset.analysisId;
+          const wsId = item.dataset.wsId;
+
+          if (e.target.closest('.ws-analysis-delete')) {
+            const isConfirmed = await window.customConfirm('Delete this analysis?');
+            if (isConfirmed) {
+              await JSA.WorkspaceStore.deleteAnalysis(analysisId);
+              if (activeAnalysisId === analysisId) activeAnalysisId = null; // Assuming updateAppUI is not defined, just clear activeAnalysisId
+              renderSidebar();
+            }
+            return;
+          }
+
+          if (e.target.closest('.ws-analysis-rename')) {
+            const an = await JSA.WorkspaceStore.getAnalysis(analysisId);
+            if (an) {
+              const newName = await window.customPrompt('Rename analysis file:', an.fileName);
+              if (newName && newName !== an.fileName) {
+                await JSA.WorkspaceStore.renameAnalysis(analysisId, newName);
+                if (activeAnalysisId === analysisId) {
+                  // Update title if it's the active one
+                  const tTitle = document.getElementById('terminal-title');
+                  if (tTitle) tTitle.textContent = newName;
+                }
+                renderSidebar();
+              }
+            }
+            return;
+          }
+
+          activeAnalysisId = analysisId;
+          await loadAnalysisFromHistory(analysisId, wsId);
+        });
+      });
+    }
+
+    // ─── Load analysis from history ───
+    async function loadAnalysisFromHistory(analysisId, wsId) {
+      try {
+        const analysis = await JSA.WorkspaceStore.getAnalysis(analysisId);
+        if (!analysis) { window.customAlert('Analysis not found.'); return; }
+
+        // Set active workspace
+        activeWorkspaceId = wsId;
+        localStorage.setItem('jsa-active-workspace', wsId);
+        activeAnalysisId = analysisId;
+
+        // Load code into editor
+        if (analysis.code) {
+          codeInput.value = analysis.code;
+          updateLineNumbers();
+        }
+
+        // Load results
+        if (analysis.results) {
+          GLOBAL_RESULTS = analysis.results;
+          renderResults(GLOBAL_RESULTS);
+          resultsSection.classList.remove('hidden');
+          fileNameDisplay.textContent = analysis.fileName;
+        }
+
+        renderSidebar();
+      } catch (e) {
+        console.error('Failed to load analysis:', e);
+        window.customAlert('Failed to load analysis from history.');
+      }
+    }
+
+    // ─── Auto-save after analysis ───
+    async function autoSaveAnalysis(fileName, results, code) {
+      if (!activeWorkspaceId || !JSA.WorkspaceStore) return;
+      try {
+        const analysis = await JSA.WorkspaceStore.saveAnalysis(
+          activeWorkspaceId, fileName, results, code
+        );
+        activeAnalysisId = analysis.id;
+        renderSidebar();
+      } catch (e) {
+        console.error('Auto-save failed:', e);
+      }
+    }
+
+    // ─── Create new workspace ───
+    newWorkspaceBtn.addEventListener('click', async () => {
+      const name = await window.customPrompt('Workspace name (e.g., "target.com"):');
+      if (!name || !name.trim()) return;
+      try {
+        const ws = await JSA.WorkspaceStore.createWorkspace(name.trim());
+        activeWorkspaceId = ws.id;
+        localStorage.setItem('jsa-active-workspace', ws.id);
+
+        // Open sidebar if not open
+        if (!sidebarOpen) {
+          sidebarOpen = true;
+          document.body.classList.add('sidebar-open');
+          localStorage.setItem('jsa-sidebar-open', 'true');
+        }
+
+        renderSidebar();
+      } catch (e) {
+        console.error('Failed to create workspace:', e);
+        alert('Failed to create workspace.');
+      }
+    });
+
+    // Initial render
+    renderSidebar();
 
   });
 })();

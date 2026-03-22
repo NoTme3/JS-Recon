@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2310b981' stroke-width='1.5'><path d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5' /></svg>">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.9/beautify.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/acorn@8.14.0/dist/acorn.js"></script>
   <link rel="stylesheet" href="./src/style.css">
@@ -20,21 +21,29 @@
   </div>
   <div class="noise-overlay"></div>
 
+
   <!-- ─── Top Navigation ─── -->
   <header class="top-nav" id="top-nav">
     <div class="nav-container">
-      <div class="navbar-brand">
-        <div class="brand-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+      <div class="nav-left">
+        <!-- Hamburger button: visible only when sidebar is closed -->
+        <button class="sidebar-open-btn" id="sidebar-open-btn" title="Open Workspaces">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
           </svg>
-        </div>
-        <div class="brand-text">
-          <span class="brand-name">JS Recon</span>
-          <span class="brand-sub">Analyzer <span class="version-badge">v2.0</span></span>
+        </button>
+        <div class="navbar-brand">
+          <div class="brand-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+            </svg>
+          </div>
+          <div class="brand-text">
+            <span class="brand-name">JS Recon</span>
+            <span class="brand-sub">Analyzer <span class="version-badge">v2.0</span></span>
+          </div>
         </div>
       </div>
-
       <nav class="navbar-nav">
         <a href="#scanner" class="nav-item active" data-view="scanner">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
@@ -52,8 +61,42 @@
     </div>
   </header>
 
-  <!-- ─── Main Content ─── -->
-  <main class="main-container">
+  <aside class="workspace-sidebar" id="workspace-sidebar">
+    <div class="sidebar-header">
+      <h2 class="sidebar-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+        </svg>
+        Workspaces
+      </h2>
+      <div class="sidebar-header-actions">
+        <button class="sidebar-new-btn" id="new-workspace-btn" title="New Workspace">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
+        <button class="sidebar-toggle-btn" id="sidebar-toggle" title="Close sidebar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="sidebar-workspace-list" id="workspace-list">
+      <div class="sidebar-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+        </svg>
+        <p>No workspaces yet</p>
+        <span>Create one to start organizing your analyses</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ─── App Layout (Sidebar + Main) ─── -->
+  <div class="app-layout" id="app-layout">
+    <!-- ─── Main Content ─── -->
+    <main class="main-container">
 
       <!-- ═══ SCANNER VIEW ═══ -->
       <div id="view-scanner">
@@ -202,7 +245,7 @@
       </div>
 
     </main>
-  </div>
+  </div> <!-- /.app-layout -->
 
   <!-- Detail Modal -->
   <div class="modal-overlay hidden" id="detail-modal">
@@ -215,7 +258,57 @@
     </div>
   </div>
 
+  <!-- Prompt Modal -->
+  <div class="modal-overlay hidden" id="prompt-modal">
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3 id="prompt-title">Input Required</h3>
+        <button class="modal-close" id="close-prompt" title="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom: 1.5rem;">
+          <input type="text" id="prompt-input" class="url-input" style="width: 100%; font-size: 1rem; padding: 0.75rem 1rem;" autocomplete="off">
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+          <button class="btn ghost-btn" id="cancel-prompt">Cancel</button>
+          <button class="btn primary-btn" id="submit-prompt">Confirm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Modal -->
+  <div class="modal-overlay hidden" id="confirm-modal">
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3 id="confirm-title" style="color: var(--red);">Confirm Action</h3>
+        <button class="modal-close" id="close-confirm" title="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-message" style="margin-bottom: 1.5rem; font-size: 0.875rem; color: var(--text-secondary);"></p>
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+          <button class="btn ghost-btn" id="cancel-confirm">Cancel</button>
+          <button class="btn primary-btn" id="submit-confirm" style="background: rgba(239, 68, 68, 0.15); color: var(--red); box-shadow: none;">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alert Modal -->
+  <div class="modal-overlay hidden" id="alert-modal">
+    <div class="modal-content" style="max-width: 400px; text-align: center;">
+      <div class="modal-header" style="border-bottom: none; justify-content: center; padding-top: 2rem;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" style="width: 48px; height: 48px; margin: 0 auto 1rem;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      </div>
+      <div class="modal-body" style="padding-top: 0;">
+        <p id="alert-message" style="margin-bottom: 2rem; color: var(--text-primary); font-size: 0.95rem; line-height: 1.6;"></p>
+        <button class="btn primary-btn" id="close-alert" style="width: 100%; justify-content: center;">OK</button>
+      </div>
+    </div>
+  </div>
+
   <script src="./src/patterns.js"></script>
+  <script src="./src/workspace-store.js"></script>
   <script src="./src/ast-analyzer.js"></script>
   <script src="./src/dynamic-sandbox.js"></script>
   <script src="./src/sourcemap-parser.js"></script>
