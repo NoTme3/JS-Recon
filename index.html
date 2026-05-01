@@ -43,7 +43,6 @@
             <span class="brand-name">JS Recon</span>
             <span class="brand-sub">Analyzer <span class="version-badge">v2.0</span></span>
           </div>
-          <span class="fingerprint-badge hidden" id="fingerprint-badge"></span>
         </div>
       </div>
       <nav class="navbar-nav">
@@ -172,8 +171,8 @@
               <div class="terminal-footer">
                 <span class="terminal-status" id="terminal-status">Ready</span>
                 <div class="terminal-footer-actions">
-                  <button class="btn chip-btn ai-btn" id="ai-enrich-btn" style="margin-right: 8px;">✨ AI Enrich</button>
-                  <button class="btn dynamic-btn" id="run-dynamic-btn" title="Run dynamic analysis in sandbox">⚡ Dynamic</button>
+                  <button class="btn secondary-btn ai-btn" id="ai-enrich-btn">✨ AI Enrich</button>
+                  <button class="btn secondary-btn" id="run-dynamic-btn" title="Run dynamic analysis in sandbox">⚡ Dynamic</button>
                   <button class="btn primary-btn" id="analyze-paste-btn">▶ Analyze</button>
                 </div>
               </div>
@@ -195,6 +194,7 @@
             <div class="results-header-left">
               <h2>Results</h2>
               <span class="file-name-badge" id="file-name-display">filename.js</span>
+              <span class="fingerprint-badge hidden" id="fingerprint-badge"></span>
             </div>
             <div class="results-toolbar">
               <select id="severity-filter" class="filter-select">
