@@ -973,16 +973,17 @@ body.sidebar-open .workspace-sidebar {
 /* ─── Stats Grid ─── */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  justify-content: center;
+  gap: 0.6rem;
   margin-bottom: 1.5rem;
 }
 .stat-card {
-  padding: 1.25rem 1rem;
+  padding: 0.85rem 0.5rem;
   border-radius: var(--r-lg);
   border: 1px solid var(--border);
   background: var(--bg-raised);
-  transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
   position: relative;
   overflow: hidden;
   cursor: pointer;
@@ -1005,16 +1006,19 @@ body.sidebar-open .workspace-sidebar {
   transition: opacity 0.3s ease, height 0.3s ease, background 0.3s ease;
 }
 .stat-card:hover { 
-  transform: translateY(-4px); 
-  border-color: var(--border-hover); 
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4); 
+  transform: translateY(-5px) scale(1.03); 
+  border-color: var(--accent); 
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.5), 0 0 15px rgba(16, 185, 129, 0.15);
+  background: var(--bg-hover);
 }
 .stat-card:hover::before {
   background: var(--accent);
   height: 3px;
 }
-.stat-title { color: var(--text-muted); font-size: 0.625rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.35rem; }
-.stat-value { font-size: 1.75rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text-primary); letter-spacing: -0.02em; }
+.stat-title { color: var(--text-muted); font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.25rem; transition: color 0.3s ease; }
+.stat-card:hover .stat-title { color: var(--text-secondary); }
+.stat-value { font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text-primary); letter-spacing: -0.02em; transition: transform 0.3s ease; }
+.stat-card:hover .stat-value { transform: scale(1.05); }
 
 /* ─── Tabs as Segmented Controls ─── */
 .tabs-container {
