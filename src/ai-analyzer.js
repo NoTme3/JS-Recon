@@ -100,8 +100,8 @@
 
   // ─── Build the prompt (Fix #5: use numeric IDs for reliable matching) ───
   function buildPrompt(batch) {
-    const findingsText = batch.map((f, i) =>
-      `${i + 1}. [finding-${i + 1}] ${f.type} | severity: ${f.severity} | confidence: ${f.confidence} | value: "${f.value}" | file: ${f.sourceFile}`
+    const findingsText = batch.map((f) =>
+      `- [${f.id}] ${f.type} | severity: ${f.severity} | confidence: ${f.confidence} | value: "${f.value}" | file: ${f.sourceFile}`
     ).join('\n');
 
     return `You are a security analyst reviewing JavaScript recon findings.
@@ -111,7 +111,7 @@ For each finding below, provide:
 3. "suggestedTest": A specific test or payload to verify the finding
 
 Respond ONLY with a valid JSON array. Each object must have these exact fields: id, severity, reasoning, suggestedTest.
-The "id" field MUST exactly match the finding ID in brackets (e.g., "finding-1", "finding-2", etc.).
+The "id" field MUST exactly match the finding ID in brackets (e.g., "${batch[0]?.id || 'finding-1'}").
 Do NOT wrap the response in markdown code blocks. Output ONLY the JSON array.
 
 Findings:
