@@ -457,7 +457,6 @@
     { id: 'libraries', label: 'Libraries', icon: 'package' },
     { id: 'integrations', label: 'Integrations', icon: 'cloud' },
     { id: 'taint', label: 'Taint Flows', icon: 'alert' },
-    { id: 'subdomains', label: 'Subdomains', icon: 'network' },
     { id: 'dynamic', label: 'Dynamic', icon: 'play' }
   ];
 
