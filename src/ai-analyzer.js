@@ -274,7 +274,7 @@ ${findingsText}`;
     await new Promise(r => setTimeout(r, 100)); // Let UI update
 
     // Chunking to prevent Vercel 504 Timeouts
-    const CHUNK_SIZE = 5;
+    const CHUNK_SIZE = 2; // Reduced from 5 to 2 because NVIDIA NIM sometimes takes >30s for 5 items
     const allEnrichments = [];
     
     for (let i = 0; i < batch.length; i += CHUNK_SIZE) {
