@@ -877,7 +877,16 @@
               <div class="match-actions">${actionBtns}</div>
             </div>
             ${exploitPanel}
-            ${item.aiReasoning ? '<div class="ai-panel"><div class="ai-panel-header">✨ AI Analysis</div><div class="ai-panel-body"><p>' + escapeHtml(item.aiReasoning) + '</p>' + (item.aiSuggestedTest ? '<div class="ai-test"><span class="exploit-label">Suggested Test</span><code class="exploit-payload">' + escapeHtml(item.aiSuggestedTest) + '</code></div>' : '') + '</div></div>' : ''}
+            ${item.aiReasoning ? `<div class="ai-panel">
+              <div class="ai-panel-header">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.58-3.25 3.93L12 22"/><path d="M8 6a4 4 0 0 1 8 0"/><path d="M17 12.5c1.77.83 3 2.6 3 4.74 0 1.86-1 3.5-2.5 4.38"/><path d="M7 12.5C5.23 13.33 4 15.1 4 17.24c0 1.86 1 3.5 2.5 4.38"/></svg>
+                AI Analysis
+              </div>
+              <div class="ai-panel-body">
+                <div class="ai-reasoning">${escapeHtml(item.aiReasoning)}</div>
+                ${item.aiSuggestedTest ? '<div class="ai-test-block"><div class="ai-test-label">Suggested Test</div><div class="ai-test-code"><code>' + escapeHtml(item.aiSuggestedTest) + '</code></div></div>' : ''}
+              </div>
+            </div>` : ''}
           </div>`;
         }).join('');
       });

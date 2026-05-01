@@ -1441,16 +1441,99 @@ body.sidebar-open .workspace-sidebar {
 /* Target domain input */
 .target-domain-group .url-input { width: 100%; }
 
-/* AI Enrichment Panels */
-.ai-enriched { border-left: 2px solid rgba(59, 130, 246, 0.5) !important; }
-.ai-severity-badge { display: inline-block; font-size: 0.55rem; font-weight: 700; text-transform: uppercase; color: #60a5fa; background: rgba(59, 130, 246, 0.12); padding: 0.1rem 0.4rem; border-radius: 9999px; border: 1px solid rgba(59, 130, 246, 0.25); letter-spacing: 0.02em; }
-.ai-panel { margin-top: 0.5rem; padding: 0.6rem 0.75rem; background: rgba(59, 130, 246, 0.06); border: 1px solid rgba(59, 130, 246, 0.15); border-radius: var(--radius-sm); }
-.ai-panel-header { font-size: 0.65rem; font-weight: 600; color: #60a5fa; margin-bottom: 0.35rem; text-transform: uppercase; letter-spacing: 0.04em; display: flex; align-items: center; gap: 0.35rem; }
-.ai-panel-header::before { content: ''; display: inline-block; width: 6px; height: 6px; background: #60a5fa; border-radius: 50%; }
-.ai-panel-body p { font-size: 0.7rem; color: var(--text-secondary); line-height: 1.5; margin: 0 0 0.4rem 0; }
-.ai-test { margin-top: 0.35rem; }
-.ai-test .exploit-label { font-size: 0.6rem; }
-.ai-test .exploit-payload { font-size: 0.65rem; }
+/* AI Enrichment Panels — Premium Design */
+.ai-enriched { border-left: 2px solid rgba(99, 102, 241, 0.6) !important; }
+
+.ai-severity-badge {
+  display: inline-block;
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+}
+.ai-severity-badge { color: #818cf8; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.25); }
+
+.ai-panel {
+  margin-top: 0.75rem;
+  padding: 0;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.06) 0%, rgba(59, 130, 246, 0.04) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.12);
+  border-left: 3px solid rgba(99, 102, 241, 0.5);
+  border-radius: 8px;
+  overflow: hidden;
+  animation: aiPanelIn 0.4s ease-out;
+}
+
+@keyframes aiPanelIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ai-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #a5b4fc;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: rgba(99, 102, 241, 0.08);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.1);
+}
+
+.ai-panel-header::before { display: none; }
+
+.ai-panel-header svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.ai-panel-body {
+  padding: 0.75rem 0.85rem;
+}
+
+.ai-reasoning {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.65;
+  margin: 0;
+}
+
+.ai-test-block {
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgba(99, 102, 241, 0.1);
+}
+
+.ai-test-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #818cf8;
+  margin-bottom: 0.4rem;
+}
+
+.ai-test-code {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: 6px;
+  padding: 0.55rem 0.75rem;
+  overflow-x: auto;
+}
+
+.ai-test-code code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: #c4b5fd;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
 
 /* Loading spinner for AI button */
 .loading-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.2); border-top-color: currentColor; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 4px; }
