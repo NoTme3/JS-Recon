@@ -84,8 +84,9 @@ body {
 /* ═══ LAYOUT ═══ */
 .top-nav {
   position: fixed; top: 0; left: 0; right: 0; z-index: 50;
-  background: transparent;
-  pointer-events: none; /* Let clicks pass through empty transparent areas */
+  background: rgba(10, 15, 22, 0.75);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 .top-nav.hide-icons .navbar-nav {
   opacity: 0;
@@ -857,6 +858,17 @@ body.sidebar-open .workspace-sidebar {
   border: 1px solid var(--border);
 }
 .secondary-btn:hover { background: var(--bg-hover); border-color: var(--border-hover); }
+
+.dynamic-btn {
+  background: rgba(245, 158, 11, 0.1) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.25) !important;
+}
+.dynamic-btn:hover {
+  background: rgba(245, 158, 11, 0.2) !important;
+  border-color: rgba(245, 158, 11, 0.5) !important;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.15) !important;
+}
 .accent-btn {
   background: linear-gradient(135deg, var(--orange), #f59e0b);
   color: #1a1a22;
@@ -1437,8 +1449,17 @@ body.sidebar-open .workspace-sidebar {
 .fingerprint-badge { background: rgba(139, 92, 246, 0.15); color: #a78bfa; padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.625rem; font-weight: 600; border: 1px solid rgba(139, 92, 246, 0.3); margin-left: 0.75rem; white-space: nowrap; }
 
 /* AI Button */
-.ai-btn { background: rgba(59, 130, 246, 0.12) !important; color: var(--cyan) !important; border-color: rgba(59, 130, 246, 0.25) !important; font-weight: 600; }
-.ai-btn:hover { background: rgba(59, 130, 246, 0.25) !important; }
+.ai-btn { 
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(6, 182, 212, 0.1)) !important; 
+  color: var(--cyan) !important; 
+  border: 1px solid rgba(6, 182, 212, 0.3) !important; 
+  font-weight: 600; 
+}
+.ai-btn:hover { 
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(6, 182, 212, 0.2)) !important; 
+  border-color: var(--cyan) !important; 
+  box-shadow: 0 0 15px rgba(6, 182, 212, 0.2) !important;
+}
 
 /* Taint & Subdomain stat colors */
 .stat-value.taint { color: #f87171; }
