@@ -273,17 +273,35 @@ ${findingsText}`;
     if (onStatus) onStatus('Preparing ' + batch.length + ' findings...');
     await new Promise(r => setTimeout(r, 100)); // Let UI update
 
-    if (onStatus) onStatus('Calling ' + provider.label + '...');
+    // Chunking to prevent Vercel 504 Timeouts
+    const CHUNK_SIZE = 5;
+    const allEnrichments = [];
+    
+    for (let i = 0; i < batch.length; i += CHUNK_SIZE) {
+      const chunk = batch.slice(i, i + CHUNK_SIZE);
+      if (onStatus) {
+        onStatus(`Calling ${provider.label} (Batch ${Math.floor(i/CHUNK_SIZE) + 1}/${Math.ceil(batch.length/CHUNK_SIZE)})...`);
+      }
+      
+      const chunkPrompt = buildPrompt(chunk);
+      try {
+        const chunkEnrichments = await provider.call(JSA.aiConfig.apiKey, chunkPrompt);
+        if (Array.isArray(chunkEnrichments)) {
+          allEnrichments.push(...chunkEnrichments);
+        }
+      } catch (err) {
+        console.error('AI Enrichment Chunk Failed:', err);
+        // If a chunk fails, we just continue with the ones we got
+      }
+    }
 
-    const enrichments = await provider.call(JSA.aiConfig.apiKey, prompt);
-
-    if (!enrichments || enrichments.length === 0) {
-      throw new Error('AI returned no enrichments. The response may have been filtered or empty.');
+    if (!allEnrichments || allEnrichments.length === 0) {
+      throw new Error('AI returned no enrichments. The response may have been filtered or timed out.');
     }
 
     // Fix #5: Build enrichment map using numeric IDs
     const enrichMap = new Map();
-    enrichments.forEach(e => {
+    allEnrichments.forEach(e => {
       if (e.id) enrichMap.set(e.id, e);
     });
 
@@ -301,7 +319,7 @@ ${findingsText}`;
 
     if (onStatus) onStatus('Done! ' + applied + ' enriched.');
     JSA._onAIStatus = null;
-    return { total: enrichments.length, applied };
+    return { total: allEnrichments.length, applied };
   };
 
   // Load saved config on startup
