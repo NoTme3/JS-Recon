@@ -1,30 +1,46 @@
-// api/analyze.js — Vercel Serverless Function for AI Proxy
+// api/analyze.js — Vercel Edge Function for AI Proxy
 // Mirrors the proxy logic from server.js for production deployment
 // Accepts: { apiKey, prompt, model?, apiUrl? }
 
-export default async function handler(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+export const config = {
+  runtime: 'edge'
+};
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+export default async function handler(req) {
   // Handle preflight
   if (req.method === 'OPTIONS') {
-    return res.status(204).end();
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), { 
+      status: 405, 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
   }
 
-  const payload = req.body;
+  let payload;
+  try {
+    payload = await req.json();
+  } catch (e) {
+    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), { 
+      status: 400, 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
+  }
 
   if (!payload || !payload.apiKey) {
-    return res.status(400).json({ error: 'Missing apiKey in request body' });
+    return new Response(JSON.stringify({ error: 'Missing apiKey in request body' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }});
   }
 
   if (!payload.prompt) {
-    return res.status(400).json({ error: 'Missing prompt in request body' });
+    return new Response(JSON.stringify({ error: 'Missing prompt in request body' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }});
   }
 
   // Determine upstream API
@@ -64,22 +80,22 @@ export default async function handler(req, res) {
         errorMsg = titleMatch?.[1] || h1Match?.[1] || `API returned HTML error page (${response.status})`;
       }
 
-      return res.status(response.status).json({ error: errorMsg });
+      return new Response(JSON.stringify({ error: errorMsg }), { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' }});
     }
 
     // Success — parse and forward
     if (contentType.includes('application/json')) {
       try {
         const data = JSON.parse(responseText);
-        return res.status(200).json(data);
+        return new Response(JSON.stringify(data), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' }});
       } catch (e) {
-        return res.status(502).json({ error: 'Failed to parse upstream response as JSON' });
+        return new Response(JSON.stringify({ error: 'Failed to parse upstream response as JSON' }), { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' }});
       }
     } else {
-      return res.status(502).json({ error: 'Upstream returned non-JSON content: ' + contentType });
+      return new Response(JSON.stringify({ error: 'Upstream returned non-JSON content: ' + contentType }), { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' }});
     }
 
   } catch (err) {
-    return res.status(500).json({ error: 'Proxy error: ' + err.message });
+    return new Response(JSON.stringify({ error: 'Proxy error: ' + err.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }});
   }
 }

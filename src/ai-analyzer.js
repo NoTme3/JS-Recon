@@ -133,12 +133,23 @@ ${findingsText}`;
       if (values.length === 1 && Array.isArray(values[0])) return values[0];
       return [parsed];
     } catch (e) {
+      console.warn('[AI] Could not parse AI response (might be truncated by timeout):', clean.substring(0, 200));
       // Try finding a JSON array in the text
       const arrMatch = clean.match(/\[[\s\S]*\]/);
       if (arrMatch) {
         try { return JSON.parse(arrMatch[0]); } catch (e2) {}
       }
-      console.warn('[AI] Could not parse AI response:', clean.substring(0, 200));
+      // Aggressive fallback: Extract whatever valid JSON objects we can from a truncated string
+      try {
+        const partialMatches = clean.match(/\{[^}]+\}/g);
+        if (partialMatches) {
+          const extracted = partialMatches.map(str => {
+            try { return JSON.parse(str); } catch (err) { return null; }
+          }).filter(Boolean);
+          if (extracted.length > 0) return extracted;
+        }
+      } catch (e3) {}
+      
       return [];
     }
   }
