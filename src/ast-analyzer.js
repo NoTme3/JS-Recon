@@ -13,7 +13,11 @@
     'innerHTML', 'outerHTML'
   ]);
 
-  const FETCH_LIKE = new Set(['fetch', 'axios', 'get', 'post', 'put', 'delete', 'patch', 'request']);
+  // Note: 'get' removed — too generic (matches headers.get(), Map.get(), etc.)
+  // Only match when prefixed: axios.get, http.get, $http.get
+  const FETCH_LIKE = new Set(['fetch', 'request']);
+  const FETCH_METHODS = new Set(['get', 'post', 'put', 'delete', 'patch']);
+  const FETCH_OBJECTS = new Set(['axios', 'http', '$http', 'api', 'client', 'ajax', 'superagent']);
 
   const SECRET_VAR_NAMES = /(?:password|passwd|secret|token|api[_-]?key|apikey|auth|jwt|bearer|access[_-]?token|client[_-]?secret|private[_-]?key|crypto[_-]?key|secret[_-]?key|master[_-]?key|session[_-]?key|signing[_-]?key|encrypt|decrypt)/i;
 
@@ -70,11 +74,19 @@
       // --- Detect fetch/XHR/axios calls with URL arguments ---
       if (node.type === 'CallExpression') {
         const calleeName = getCalleeName(node.callee);
-        if (calleeName && FETCH_LIKE.has(calleeName.split('.').pop())) {
+        const parts = calleeName ? calleeName.split('.') : [];
+        const methodName = parts.pop();
+        const objectName = parts.pop();
+
+        // Match: fetch(), request(), axios.get(), http.post(), etc.
+        const isFetchCall = (methodName && FETCH_LIKE.has(methodName)) ||
+          (methodName && FETCH_METHODS.has(methodName) && objectName && FETCH_OBJECTS.has(objectName));
+
+        if (isFetchCall) {
           const urlArg = node.arguments && node.arguments[0];
           if (urlArg) {
             const url = extractStringValue(urlArg);
-            if (url && url.length > 3) {
+            if (url && url.length > 3 && isLikelyUrl(url)) {
               findings.push({
                 category: url.startsWith('http') ? 'full-urls' : 'endpoints',
                 value: url,
@@ -125,7 +137,7 @@
       if (node.type === 'VariableDeclarator' && node.id && node.id.name) {
         if (SECRET_VAR_NAMES.test(node.id.name) && node.init) {
           const val = extractStringValue(node.init);
-          if (val && val.length >= 8) {
+          if (val && val.length >= 8 && !isSecretFalsePositive(val)) {
             // Skip if the raw value was already detected by regex patterns
             const alreadyFound = findings.some(f => f.category === 'secrets' && f.value && f.value.includes(val.substring(0, 20)));
             if (!alreadyFound) {
@@ -148,7 +160,7 @@
         const leftName = getCalleeName(node.left);
         if (leftName && SECRET_VAR_NAMES.test(leftName)) {
           const val = extractStringValue(node.right);
-          if (val && val.length >= 8) {
+          if (val && val.length >= 8 && !isSecretFalsePositive(val)) {
             findings.push({
               category: 'secrets',
               value: leftName + ' = "' + val.substring(0, 50) + (val.length > 50 ? '...' : '') + '"',
@@ -212,6 +224,39 @@
         return prop || obj;
       }
       return null;
+    }
+
+    // Helper: check if a string looks like a URL/endpoint vs a header/MIME type
+    function isLikelyUrl(val) {
+      // Must start with /, http, or contain a path separator
+      if (/^https?:\/\//i.test(val)) return true;
+      if (/^\/[a-zA-Z0-9]/.test(val)) return true;
+      // Reject MIME types (text/html, application/json, etc.)
+      if (/^(?:text|application|image|audio|video|font|multipart|message|model)\//.test(val)) return false;
+      // Reject HTTP headers
+      if (/^(?:content-type|accept|authorization|cache-control|access-control|x-forwarded|user-agent|keep-alive)$/i.test(val)) return false;
+      // Reject single words without path separators
+      if (!/\//.test(val) && !/^https?:/i.test(val)) return false;
+      return true;
+    }
+
+    // Helper: check if a value is a false positive for secret detection
+    function isSecretFalsePositive(val) {
+      // URL route paths (e.g., /users/forget-password, auth/reset-password)
+      if (/^\/?[a-zA-Z0-9_-]+\/[a-zA-Z0-9_\-/]+$/.test(val)) return true;
+      // Placeholder values (YOUR_KEY_HERE, CHANGE_ME, etc.)
+      if (/^(?:YOUR|MY|THE|ENTER|INSERT|REPLACE|SET|EXAMPLE|SAMPLE|TEST|DEMO|DUMMY|FAKE|MOCK|DEFAULT|PLACEHOLDER|TODO|FIXME|XXX|CHANGE)[_\s-]/i.test(val)) return true;
+      // Descriptive text with spaces ("google place api key", "enter your token")
+      if (/\s/.test(val) && /\b(?:api|key|token|secret|password|here|your|the|for|this|enter|place|google|base|url|proxy)\b/i.test(val)) return true;
+      // Wildcard/template values (Bearer *, ${token})
+      if (/^Bearer\s*\*?$/.test(val) || /^\$\{|^\{\{/.test(val)) return true;
+      // Environment variable references
+      if (/^process\.env\.|^import\.meta\.env\./.test(val)) return true;
+      // All lowercase words (not an actual key)
+      if (/^[a-z][a-z\s-]{4,}$/i.test(val) && !/[A-Z0-9_]{8,}/.test(val) && /\s|-/.test(val)) return true;
+      // Common non-secret values
+      if (/^(?:true|false|null|undefined|none|n\/a|0|1)$/i.test(val)) return true;
+      return false;
     }
 
     // Helper: extract string value from a node

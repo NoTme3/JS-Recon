@@ -39,6 +39,28 @@
         matchText = matchText.replace(/^["']|["']$/g, '').trim();
         if (matchText.length < 4) continue;
 
+        // ─── FALSE POSITIVE FILTERS ───
+        // 1) Secrets: skip placeholder/descriptive values
+        if (rule.resultCategory === 'secrets' || ruleId.includes('secret') || ruleId.includes('password')) {
+          const lower = matchText.toLowerCase();
+          // Skip obvious placeholders (YOUR_KEY_HERE, CHANGE_ME, example_token, etc.)
+          if (/^(?:your|my|the|a|an|this|enter|insert|put|add|replace|set|example|sample|test|demo|dummy|fake|mock|default|placeholder|todo|fixme|xxx|changeme|change)[\s_\-]/i.test(matchText)) continue;
+          // Skip descriptive phrases with spaces (contains spaces + common words like "google place api key")
+          if (/\s/.test(matchText) && /\b(?:api|key|token|secret|password|here|your|the|for|this|enter|place|google|base|url|proxy)\b/i.test(lower)) continue;
+          // Skip URL route paths (e.g., /users/forget-password, auth/reset-password)
+          if (/^\/[a-zA-Z0-9_\-/]+$/.test(matchText)) continue;
+          // Skip values that are just lowercase words (not real keys)
+          if (/^[a-z][a-z\s]{4,}$/i.test(matchText) && !/[A-Z0-9_\-]{8,}/.test(matchText)) continue;
+          // Skip environment variable references
+          if (/^(?:process\.env\.|import\.meta\.env\.)/.test(matchText)) continue;
+          // Skip interpolation templates
+          if (/^\$\{|^\{\{|^%[sd]/.test(matchText)) continue;
+          // Skip wildcard/template values (Bearer *, etc.)
+          if (/^Bearer\s*\*?$/i.test(matchText)) continue;
+          // Skip common non-secret values
+          if (/^(?:true|false|null|undefined|none|n\/a)$/i.test(matchText)) continue;
+        }
+
         const entry = {
           value: matchText,
           type: rule.label,
@@ -49,6 +71,20 @@
           ruleId: ruleId,
           isBase64: ruleId.includes('secret') || rule.resultCategory === 'secrets' ? isBase64(matchText) : false
         };
+
+        // 2) URLs/IPs: downgrade localhost, private IPs, loopback to info
+        if (ruleId === 'ipv4') {
+          if (/^(?:127\.|0\.|10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.|255\.|224\.)/.test(matchText)) {
+            entry.severity = 'info';
+            entry.confidence = 'low';
+            entry.type = 'Private/Local IP';
+          }
+        }
+        if ((ruleId === 'urls' || ruleId === 'linkfinder') && /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|10\.\d|172\.(?:1[6-9]|2\d|3[01])\.\d|192\.168\.\d)/i.test(matchText)) {
+          entry.severity = 'info';
+          entry.confidence = 'low';
+          entry.type = 'Local/Dev URL';
+        }
 
         if (rule.hasExploitInfo) {
           const sinkName = rule.exploitKey || matchText.replace(/\s*\($/, '').toLowerCase().replace(/\./g, '');
@@ -64,6 +100,10 @@
           if (/^\/\*|\*\/$/.test(matchText.trim())) continue;
           if (/^\/?(?:src|dist|build|lib|app|components|modules|services|utils|helpers|guards?|interceptors?|shared|core|assets|styles|environments)\//.test(matchText)) continue;
           if (/^#/.test(matchText)) continue;
+          // Skip MIME types (text/html, application/json, image/png, etc.)
+          if (/^(?:text|application|image|audio|video|font|multipart|message|model)\/[a-zA-Z0-9.+\-]+$/.test(matchText)) continue;
+          // Skip HTTP headers and common non-URL slash patterns
+          if (/^(?:content-type|accept|authorization|cache-control|access-control|x-forwarded|x-requested|keep-alive|user-agent)$/i.test(matchText)) continue;
           const targetCat = /^https?:\/\//i.test(matchText) ? 'full-urls' : 'endpoints';
           entry.type = targetCat === 'full-urls' ? 'Full URL' : 'Endpoint';
           if (seenSets[targetCat].has(matchText)) continue;
@@ -407,18 +447,42 @@
     });
 
     // ─── Line numbers ───
+    const LINE_NUM_MAX = 10000; // Cap visible line numbers for performance
+    const LARGE_FILE_SIZE = 500000; // 500KB
+    let _lineNumTimer = null;
+
     function updateLineNumbers() {
       const text = codeInput.value;
       const lineCount = text ? text.split('\n').length : 1;
-      lineNumbersEl.textContent = Array.from({ length: lineCount }, (_, i) => i + 1).join('\n');
+
       if (terminalStatus) {
-        terminalStatus.textContent = lineCount + ' lines · ' + text.length + ' chars';
+        terminalStatus.textContent = lineCount.toLocaleString() + ' lines · ' + text.length.toLocaleString() + ' chars';
       }
+
+      // Cap line numbers for large files — rendering 100K lines freezes the browser
+      if (lineCount > LINE_NUM_MAX) {
+        lineNumbersEl.textContent = Array.from({ length: LINE_NUM_MAX }, (_, i) => i + 1).join('\n') + '\n...';
+      } else {
+        lineNumbersEl.textContent = Array.from({ length: lineCount }, (_, i) => i + 1).join('\n');
+      }
+
       updateHighlighting();
     }
 
+    // Debounced version for input events (prevents lag on rapid typing/pasting)
+    function debouncedUpdateLineNumbers() {
+      clearTimeout(_lineNumTimer);
+      // Update status bar immediately (cheap)
+      const text = codeInput.value;
+      const lineCount = text ? text.split('\n').length : 1;
+      if (terminalStatus) {
+        terminalStatus.textContent = lineCount.toLocaleString() + ' lines · ' + text.length.toLocaleString() + ' chars';
+      }
+      // Debounce the expensive DOM updates
+      _lineNumTimer = setTimeout(updateLineNumbers, text.length > LARGE_FILE_SIZE ? 500 : 100);
+    }
+
     // ─── Syntax Highlighting ───
-    const HIGHLIGHT_MAX_SIZE = 500000; // Skip highlighting for files > 500KB
     let _hlTimer = null;
     function updateHighlighting() {
       if (!codeHighlightContent || typeof hljs === 'undefined') return;
@@ -431,13 +495,22 @@
         return;
       }
       
-      if (text.length > HIGHLIGHT_MAX_SIZE) {
-        // Too large — show plain unhighlighted text for performance
-        codeHighlightContent.textContent = text;
+      if (text.length > LARGE_FILE_SIZE) {
+        // Too large — hide highlight overlay entirely to avoid 5MB DOM update
+        codeHighlightContent.textContent = '';
         codeHighlightContent.className = '';
+        if (codeHighlightEl) codeHighlightEl.style.display = 'none';
+        // Make textarea text visible since overlay is hidden
+        codeInput.style.color = '#d4d4d8';
+        codeInput.style.caretColor = '#10b981';
         clearTimeout(_hlTimer);
         return;
       }
+
+      // Re-enable overlay for normal files
+      if (codeHighlightEl) codeHighlightEl.style.display = '';
+      codeInput.style.color = 'transparent';
+      codeInput.style.caretColor = '#10b981';
       
       // Update text instantly to prevent input lag/invisible text
       codeHighlightContent.textContent = text;
@@ -447,12 +520,11 @@
         codeHighlightContent.className = 'language-javascript';
         delete codeHighlightContent.dataset.highlighted;
         hljs.highlightElement(codeHighlightContent);
-        // Sync scroll again after highlighting just in case font parsing shifted
         syncHighlightScroll();
       }, 120);
     }
     function syncHighlightScroll() {
-      if (codeHighlightEl) {
+      if (codeHighlightEl && codeHighlightEl.style.display !== 'none') {
         codeHighlightEl.scrollTop = codeInput.scrollTop;
         codeHighlightEl.scrollLeft = codeInput.scrollLeft;
       }
@@ -540,8 +612,8 @@
 
     // ─── Terminal editor events ───
     if (codeInput && lineNumbersEl) {
-      codeInput.addEventListener('input', updateLineNumbers);
-      codeInput.addEventListener('paste', () => setTimeout(updateLineNumbers, 0));
+      codeInput.addEventListener('input', debouncedUpdateLineNumbers);
+      codeInput.addEventListener('paste', () => setTimeout(debouncedUpdateLineNumbers, 0));
       codeInput.addEventListener('scroll', () => {
         lineNumbersEl.scrollTop = codeInput.scrollTop;
         syncHighlightScroll();
@@ -718,16 +790,89 @@
       }
     }
 
+    // ─── Web Worker analysis ───
+    let analysisWorker = null;
+    const WORKER_THRESHOLD = 50000; // Use worker for files > 50KB
+
+    function getOrCreateWorker() {
+      if (analysisWorker) return analysisWorker;
+      try {
+        analysisWorker = new Worker('/src/analyzer.worker.js');
+        console.log('[Worker] Analysis worker created');
+      } catch (e) {
+        console.warn('[Worker] Failed to create worker, using main thread:', e.message);
+        analysisWorker = null;
+      }
+      return analysisWorker;
+    }
+
+    function analyzeWithWorker(content, fileName) {
+      return new Promise((resolve, reject) => {
+        const worker = getOrCreateWorker();
+        if (!worker) {
+          reject(new Error('Worker unavailable'));
+          return;
+        }
+
+        const timeout = setTimeout(() => {
+          console.warn('[Worker] Analysis timed out after 60s, falling back');
+          worker.terminate();
+          analysisWorker = null;
+          reject(new Error('Worker timeout'));
+        }, 60000);
+
+        worker.onmessage = (e) => {
+          if (e.data.type === 'progress') {
+            updateProgress(e.data.progress);
+          } else if (e.data.type === 'done') {
+            clearTimeout(timeout);
+            resolve(e.data.results);
+          }
+        };
+
+        worker.onerror = (err) => {
+          clearTimeout(timeout);
+          console.warn('[Worker] Error:', err.message);
+          worker.terminate();
+          analysisWorker = null;
+          reject(err);
+        };
+
+        worker.postMessage({
+          content,
+          fileName,
+          sourceBaseUrl: sourceBaseUrl,
+          entropyThreshold: JSA.entropyThreshold || 4.5
+        });
+      });
+    }
+
     // ─── Run analysis helper ───
     async function runAnalysis(text, fileName) {
       showProgress('Analyzing...');
       dropZone.classList.add('loading-pulse');
       GLOBAL_RESULTS = JSA.createEmptyResults();
-      const seenSets = JSA.createEmptySeen();
 
       try {
         await new Promise(r => setTimeout(r, 50)); // Let UI update
-        await analyzeFileContent(text, fileName, GLOBAL_RESULTS, seenSets, updateProgress);
+
+        // Use worker for large files, main thread for small ones
+        if (text.length > WORKER_THRESHOLD) {
+          progressLabel.textContent = 'Analyzing (worker thread)...';
+          try {
+            GLOBAL_RESULTS = await analyzeWithWorker(text, fileName);
+          } catch (workerErr) {
+            // Fallback to main thread
+            console.log('[Worker] Fallback to main thread:', workerErr.message);
+            progressLabel.textContent = 'Analyzing (main thread)...';
+            const seenSets = JSA.createEmptySeen();
+            await analyzeFileContent(text, fileName, GLOBAL_RESULTS, seenSets, updateProgress);
+          }
+        } else {
+          const seenSets = JSA.createEmptySeen();
+          await analyzeFileContent(text, fileName, GLOBAL_RESULTS, seenSets, updateProgress);
+        }
+
         // Fingerprint
         if (typeof JSA.fingerprint === 'function') {
           currentFingerprint = JSA.fingerprint(text);

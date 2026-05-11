@@ -23,7 +23,17 @@
         }
       };
       req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
+      req.onerror = (e) => {
+        // If a stale higher-version DB exists (e.g. from Dexie), delete and retry
+        if (e.target.error && e.target.error.name === 'VersionError') {
+          console.warn('[WorkspaceStore] VersionError — deleting stale DB and retrying...');
+          const delReq = indexedDB.deleteDatabase(DB_NAME);
+          delReq.onsuccess = () => openDB().then(resolve).catch(reject);
+          delReq.onerror = () => reject(e.target.error);
+        } else {
+          reject(req.error);
+        }
+      };
     });
   }
 
