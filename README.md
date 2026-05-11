@@ -38,7 +38,6 @@ src/
   report.js         — HTML report generation
   style.css         — All styles
 server.cjs          — Local dev API proxy (for AI enrichment)
-api/analyze.js      — Vercel serverless function
 vite.config.js      — Vite build config
 ```
 
@@ -57,12 +56,3 @@ npm run dev
 # Production build
 npm run build
 ```
-
-## Deployment (Vercel)
-
-```bash
-# Push to GitHub — Vercel auto-deploys
-git push origin main
-```
-
-The `vercel.json` configures the serverless `/api/analyze` function and CORS headers.
