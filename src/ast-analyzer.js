@@ -1,4 +1,5 @@
 // src/ast-analyzer.js — AST-based analysis using Acorn
+// Includes: constant propagation, deterministic evaluation, entropy scoring, value-based classification
 (function () {
   'use strict';
   window.JSA = window.JSA || {};
@@ -21,6 +22,58 @@
 
   const SECRET_VAR_NAMES = /(?:password|passwd|secret|token|api[_-]?key|apikey|auth|jwt|bearer|access[_-]?token|client[_-]?secret|private[_-]?key|crypto[_-]?key|secret[_-]?key|master[_-]?key|session[_-]?key|signing[_-]?key|encrypt|decrypt)/i;
 
+  // ─── Safety & Performance Guards (Milestone 9) ───
+  const MAX_RECURSION_DEPTH = 10;
+  const MAX_STRING_SIZE = 4096;
+  const MAX_EVALUATIONS_PER_FILE = 10000;
+
+  // ─── Deterministic Evaluator Registry (Milestone 6) ───
+  // Only side-effect-free, deterministic built-in APIs
+  const SAFE_EVALUATORS = {
+    'String.fromCharCode': function (node) {
+      if (!node.arguments || node.arguments.length === 0) return null;
+      if (node.arguments.length > 256) return null; // safety cap
+      const chars = [];
+      for (const arg of node.arguments) {
+        if (arg.type === 'SpreadElement') return null;
+        if (arg.type !== 'Literal' || typeof arg.value !== 'number') return null;
+        if (arg.value < 0 || arg.value > 0x10FFFF) return null;
+        chars.push(String.fromCharCode(arg.value));
+      }
+      const result = chars.join('');
+      return result.length <= MAX_STRING_SIZE ? result : null;
+    }
+  };
+
+  // ─── Value-Based Secret Patterns (Milestone 5) ───
+  // Run against resolved constant values regardless of variable name
+  const VALUE_SECRET_PATTERNS = [
+    { regex: /^AKIA[0-9A-Z]{16,}$/, label: 'AWS Access Key', severity: 'critical' },
+    { regex: /^AIza[0-9A-Za-z\-_]{35}$/, label: 'Google API Key', severity: 'critical' },
+    { regex: /^(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}$/, label: 'GitHub Token', severity: 'critical' },
+    { regex: /^(?:sk|pk|rk)_(?:live|test)_[0-9a-zA-Z]{10,}$/, label: 'Stripe Key', severity: 'critical' },
+    { regex: /^xox[bposa]-[0-9a-zA-Z\-]{10,}$/, label: 'Slack Token', severity: 'critical' },
+    { regex: /^eyJ[A-Za-z0-9\-_]{10,}\.eyJ[A-Za-z0-9\-_]{10,}\.[A-Za-z0-9\-_.+\/=]{10,}$/, label: 'JWT Token', severity: 'high' },
+    { regex: /^-----BEGIN\s(?:RSA\s|EC\s|DSA\s|OPENSSH\s)?PRIVATE\sKEY-----/, label: 'Private Key', severity: 'critical' },
+    { regex: /^(?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis|amqp|mssql):\/\//, label: 'Database URL', severity: 'critical' },
+    { regex: /^[a-f0-9]{64,}$/i, label: 'Long Hex Token', severity: 'high' },
+    { regex: /^nvapi-[A-Za-z0-9\-_]{20,}$/, label: 'NVIDIA API Key', severity: 'critical' },
+    { regex: /^sk-[A-Za-z0-9]{20,}$/, label: 'OpenAI API Key', severity: 'critical' },
+    { regex: /^sk-ant-[A-Za-z0-9\-_]{20,}$/, label: 'Anthropic API Key', severity: 'critical' },
+  ];
+
+  // ─── Entropy Calculation (Shannon entropy) ───
+  function calculateEntropy(str) {
+    if (!str || str.length < 2) return 0;
+    const len = str.length;
+    const freq = {};
+    for (const c of str) freq[c] = (freq[c] || 0) + 1;
+    return Object.values(freq).reduce((s, f) => s - (f / len) * Math.log2(f / len), 0);
+  }
+
+  // Export for use in main.js and worker
+  JSA.calculateEntropy = calculateEntropy;
+
   /**
    * Analyze JS code using AST (Acorn).
    * Returns additional findings not caught by regex.
@@ -28,6 +81,10 @@
   JSA.analyzeAST = function (code, fileName) {
     if (typeof acorn === 'undefined') return [];
     const findings = [];
+
+    // ─── Constant Resolution Store (Milestone 1) ───
+    const constValues = new Map();
+    let evalCount = 0;
 
     let ast;
     try {
@@ -42,7 +99,6 @@
         tolerant: true
       });
     } catch (e) {
-      // Try as script if module parse fails
       try {
         ast = acorn.parse(code, {
           ecmaVersion: 'latest',
@@ -52,7 +108,7 @@
           tolerant: true
         });
       } catch (e2) {
-        return []; // Unparseable
+        return [];
       }
     }
 
@@ -78,7 +134,6 @@
         const methodName = parts.pop();
         const objectName = parts.pop();
 
-        // Match: fetch(), request(), axios.get(), http.post(), etc.
         const isFetchCall = (methodName && FETCH_LIKE.has(methodName)) ||
           (methodName && FETCH_METHODS.has(methodName) && objectName && FETCH_OBJECTS.has(objectName));
 
@@ -133,42 +188,71 @@
         }
       }
 
-      // --- Detect secret-like variable assignments ---
+      // ─── Constant Tracking (Milestones 1, 7) ───
+      // Track VariableDeclarator for constant propagation + value-based classification
+      if (node.type === 'VariableDeclarator' && node.id && node.id.name && node.init) {
+        const resolved = extractStringValue(node.init);
+        if (resolved && typeof resolved === 'string') {
+          constValues.set(node.id.name, resolved);
+
+          // Value-based secret classification (Milestone 5) — works regardless of variable name
+          const classification = classifyResolvedValue(
+            resolved, node.id.name,
+            node.loc ? node.loc.start.line : null, fileName
+          );
+          if (classification) {
+            const alreadyFound = findings.some(f =>
+              f.category === 'secrets' && f.value && f.value.includes(resolved.substring(0, 20))
+            );
+            if (!alreadyFound) findings.push(classification);
+          }
+        }
+      }
+
+      // --- Detect secret-like variable assignments (name-based + entropy) ---
       if (node.type === 'VariableDeclarator' && node.id && node.id.name) {
         if (SECRET_VAR_NAMES.test(node.id.name) && node.init) {
           const val = extractStringValue(node.init);
           if (val && val.length >= 8 && !isSecretFalsePositive(val)) {
-            // Skip if the raw value was already detected by regex patterns
-            const alreadyFound = findings.some(f => f.category === 'secrets' && f.value && f.value.includes(val.substring(0, 20)));
+            const entropy = calculateEntropy(val);
+            const alreadyFound = findings.some(f =>
+              f.category === 'secrets' && f.value && f.value.includes(val.substring(0, 20))
+            );
             if (!alreadyFound) {
               findings.push({
                 category: 'secrets',
                 value: node.id.name + ' = "' + val.substring(0, 50) + (val.length > 50 ? '...' : '') + '"',
                 type: 'AST: Secret Variable',
-                severity: 'high',
-                confidence: 'medium',
+                severity: entropy > 4.0 ? 'high' : (entropy > 3.0 ? 'medium' : 'low'),
+                confidence: entropy > 4.0 ? 'high' : (entropy > 3.5 ? 'medium' : 'low'),
                 line: node.loc ? node.loc.start.line : null,
-                sourceFile: fileName
+                sourceFile: fileName,
+                entropy: Math.round(entropy * 100) / 100
               });
             }
           }
         }
       }
 
-      // --- Detect assignment expressions with secret-like names ---
+      // --- Assignment expressions: constant tracking + secret detection + entropy ---
       if (node.type === 'AssignmentExpression' && node.left) {
         const leftName = getCalleeName(node.left);
-        if (leftName && SECRET_VAR_NAMES.test(leftName)) {
-          const val = extractStringValue(node.right);
-          if (val && val.length >= 8 && !isSecretFalsePositive(val)) {
+        if (leftName) {
+          const resolved = extractStringValue(node.right);
+          if (resolved && typeof resolved === 'string') {
+            constValues.set(leftName, resolved);
+          }
+          if (SECRET_VAR_NAMES.test(leftName) && resolved && resolved.length >= 8 && !isSecretFalsePositive(resolved)) {
+            const entropy = calculateEntropy(resolved);
             findings.push({
               category: 'secrets',
-              value: leftName + ' = "' + val.substring(0, 50) + (val.length > 50 ? '...' : '') + '"',
+              value: leftName + ' = "' + resolved.substring(0, 50) + (resolved.length > 50 ? '...' : '') + '"',
               type: 'AST: Secret Assignment',
-              severity: 'high',
-              confidence: 'medium',
+              severity: entropy > 4.0 ? 'high' : (entropy > 3.0 ? 'medium' : 'low'),
+              confidence: entropy > 4.0 ? 'high' : (entropy > 3.5 ? 'medium' : 'low'),
               line: node.loc ? node.loc.start.line : null,
-              sourceFile: fileName
+              sourceFile: fileName,
+              entropy: Math.round(entropy * 100) / 100
             });
           }
         }
@@ -213,7 +297,7 @@
       }
     }
 
-    // Helper: extract callee name from various node shapes
+    // ─── Helper: extract callee name ───
     function getCalleeName(node) {
       if (!node) return null;
       if (node.type === 'Identifier') return node.name;
@@ -226,51 +310,126 @@
       return null;
     }
 
-    // Helper: check if a string looks like a URL/endpoint vs a header/MIME type
+    // ─── Helper: URL validation ───
     function isLikelyUrl(val) {
-      // Must start with /, http, or contain a path separator
       if (/^https?:\/\//i.test(val)) return true;
       if (/^\/[a-zA-Z0-9]/.test(val)) return true;
-      // Reject MIME types (text/html, application/json, etc.)
       if (/^(?:text|application|image|audio|video|font|multipart|message|model)\//.test(val)) return false;
-      // Reject HTTP headers
       if (/^(?:content-type|accept|authorization|cache-control|access-control|x-forwarded|user-agent|keep-alive)$/i.test(val)) return false;
-      // Reject single words without path separators
       if (!/\//.test(val) && !/^https?:/i.test(val)) return false;
       return true;
     }
 
-    // Helper: check if a value is a false positive for secret detection
+    // ─── Helper: false positive filter ───
     function isSecretFalsePositive(val) {
-      // URL route paths (e.g., /users/forget-password, auth/reset-password)
       if (/^\/?[a-zA-Z0-9_-]+\/[a-zA-Z0-9_\-/]+$/.test(val)) return true;
-      // Placeholder values (YOUR_KEY_HERE, CHANGE_ME, etc.)
       if (/^(?:YOUR|MY|THE|ENTER|INSERT|REPLACE|SET|EXAMPLE|SAMPLE|TEST|DEMO|DUMMY|FAKE|MOCK|DEFAULT|PLACEHOLDER|TODO|FIXME|XXX|CHANGE)[_\s-]/i.test(val)) return true;
-      // Descriptive text with spaces ("google place api key", "enter your token")
       if (/\s/.test(val) && /\b(?:api|key|token|secret|password|here|your|the|for|this|enter|place|google|base|url|proxy)\b/i.test(val)) return true;
-      // Wildcard/template values (Bearer *, ${token})
       if (/^Bearer\s*\*?$/.test(val) || /^\$\{|^\{\{/.test(val)) return true;
-      // Environment variable references
       if (/^process\.env\.|^import\.meta\.env\./.test(val)) return true;
-      // All lowercase words (not an actual key)
       if (/^[a-z][a-z\s-]{4,}$/i.test(val) && !/[A-Z0-9_]{8,}/.test(val) && /\s|-/.test(val)) return true;
-      // Common non-secret values
       if (/^(?:true|false|null|undefined|none|n\/a|0|1)$/i.test(val)) return true;
       return false;
     }
 
-    // Helper: extract string value from a node
-    function extractStringValue(node) {
+    // ─── Enhanced extractStringValue (Milestones 2, 3, 4) ───
+    // Supports: Literals, Identifiers (propagation), BinaryExpression (+),
+    // TemplateLiterals, and deterministic CallExpressions (e.g. String.fromCharCode)
+    function extractStringValue(node, depth) {
       if (!node) return null;
+      depth = depth || 0;
+      if (depth > MAX_RECURSION_DEPTH) return null;
+      evalCount++;
+      if (evalCount > MAX_EVALUATIONS_PER_FILE) return null;
+
+      // Direct string literal
       if (node.type === 'Literal' && typeof node.value === 'string') return node.value;
-      if (node.type === 'TemplateLiteral' && node.quasis && node.quasis.length > 0) {
-        return node.quasis.map(q => q.value ? q.value.raw : '').join('*');
+
+      // Identifier lookup — constant propagation (Milestone 2)
+      if (node.type === 'Identifier') {
+        return constValues.get(node.name) || null;
       }
+
+      // Template literal with expression resolution
+      if (node.type === 'TemplateLiteral' && node.quasis) {
+        let result = '';
+        for (let i = 0; i < node.quasis.length; i++) {
+          result += node.quasis[i].value ? node.quasis[i].value.raw : '';
+          if (i < (node.expressions || []).length) {
+            const exprVal = extractStringValue(node.expressions[i], depth + 1);
+            if (exprVal === null) {
+              // Can't fully resolve — use placeholder
+              result += '*';
+            } else {
+              result += exprVal;
+            }
+          }
+        }
+        return result.length <= MAX_STRING_SIZE ? result : null;
+      }
+
+      // Binary concatenation — recursive folding (Milestone 4)
       if (node.type === 'BinaryExpression' && node.operator === '+') {
-        const left = extractStringValue(node.left);
-        const right = extractStringValue(node.right);
-        if (left || right) return (left || '') + (right || '');
+        const left = extractStringValue(node.left, depth + 1);
+        const right = extractStringValue(node.right, depth + 1);
+        if (left !== null || right !== null) {
+          const result = (left || '') + (right || '');
+          return result.length <= MAX_STRING_SIZE ? result : null;
+        }
+        return null;
       }
+
+      // Deterministic CallExpression evaluation (Milestone 3)
+      if (node.type === 'CallExpression') {
+        const callee = getCalleeName(node.callee);
+        if (callee && SAFE_EVALUATORS[callee]) {
+          return SAFE_EVALUATORS[callee](node);
+        }
+      }
+
+      return null;
+    }
+
+    // ─── Value-Based Secret Classification (Milestone 5 + Entropy) ───
+    function classifyResolvedValue(value, varName, line, srcFile) {
+      if (!value || value.length < 8) return null;
+      if (isSecretFalsePositive(value)) return null;
+
+      // Check against known secret provider patterns
+      for (const pattern of VALUE_SECRET_PATTERNS) {
+        if (pattern.regex.test(value)) {
+          const entropy = calculateEntropy(value);
+          return {
+            category: 'secrets',
+            value: (varName ? varName + ' = ' : '') + '"' + value.substring(0, 50) + (value.length > 50 ? '...' : '') + '"',
+            type: 'AST: Reconstructed Secret (' + pattern.label + ')',
+            severity: pattern.severity,
+            confidence: 'high',
+            line: line,
+            sourceFile: srcFile,
+            entropy: Math.round(entropy * 100) / 100
+          };
+        }
+      }
+
+      // Entropy-based detection for unknown patterns
+      const entropy = calculateEntropy(value);
+      const hasHighEntropy = entropy > 3.5 && value.length >= 16;
+      const hasMixedCharset = /[a-z]/.test(value) && /[A-Z]/.test(value) && /[0-9]/.test(value);
+
+      if (hasHighEntropy && hasMixedCharset) {
+        return {
+          category: 'secrets',
+          value: (varName ? varName + ' = ' : '') + '"' + value.substring(0, 50) + (value.length > 50 ? '...' : '') + '"',
+          type: 'AST: High-Entropy Secret',
+          severity: entropy > 4.5 ? 'high' : 'medium',
+          confidence: entropy > 4.0 ? 'medium' : 'low',
+          line: line,
+          sourceFile: srcFile,
+          entropy: Math.round(entropy * 100) / 100
+        };
+      }
+
       return null;
     }
 
