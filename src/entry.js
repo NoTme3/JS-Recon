@@ -1,6 +1,10 @@
 // Entry point — loads all modules in the correct order
 // This replaces the individual <script> tags in index.html
 
+import { inject } from '@vercel/analytics';
+
+inject();
+
 import './style.css';
 import './patterns.js';
 import './workspace-store.js';
