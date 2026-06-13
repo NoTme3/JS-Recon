@@ -144,6 +144,138 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ═══════════════════════════════════════════════════════════
+  // /api/discover — Crawl a page and extract all JS file URLs
+  // ═══════════════════════════════════════════════════════════
+  if (req.method === 'GET' && url.pathname === '/api/discover') {
+    const targetUrl = url.searchParams.get('url');
+    const fetchContent = url.searchParams.get('fetch') === 'true';
+
+    if (!targetUrl) {
+      return jsonResponse(res, 400, { error: 'Missing ?url= parameter' });
+    }
+
+    try {
+      const parsed = new URL(targetUrl);
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return jsonResponse(res, 400, { error: 'Only http/https URLs supported' });
+      }
+    } catch (e) {
+      return jsonResponse(res, 400, { error: 'Invalid URL: ' + e.message });
+    }
+
+    console.log(`[DISCOVER] Crawling ${targetUrl}...`);
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+
+      const response = await fetch(targetUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,*/*'
+        },
+        redirect: 'follow'
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        return jsonResponse(res, response.status, {
+          error: `Remote server returned ${response.status}`
+        });
+      }
+
+      const html = await response.text();
+      const baseUrl = new URL(targetUrl);
+
+      // Extract JS URLs from HTML
+      const jsUrls = new Set();
+
+      // <script src="...">
+      const scriptSrcRegex = /<script[^>]+src=["']([^"']+)["'][^>]*>/gi;
+      let m;
+      while ((m = scriptSrcRegex.exec(html)) !== null) {
+        const src = m[1].trim();
+        if (!src || src.startsWith('data:')) continue;
+        try {
+          const abs = new URL(src, targetUrl).href;
+          jsUrls.add(abs);
+        } catch (e) {}
+      }
+
+      // Look for JS URLs in inline script content (webpack, dynamic imports)
+      const inlineChunkRegex = /["']((?:https?:)?\/\/[^"']+\.js(?:\?[^"']*)?|\/[^"'\s]+\.js(?:\?[^"']*)?)/gi;
+      while ((m = inlineChunkRegex.exec(html)) !== null) {
+        const src = m[1].trim();
+        try {
+          const abs = new URL(src, targetUrl).href;
+          jsUrls.add(abs);
+        } catch (e) {}
+      }
+
+      // Also check link preload
+      const preloadRegex = /<link[^>]+rel=["'](?:preload|modulepreload)["'][^>]+href=["']([^"']+\.js[^"']*)["'][^>]*>/gi;
+      while ((m = preloadRegex.exec(html)) !== null) {
+        try {
+          const abs = new URL(m[1].trim(), targetUrl).href;
+          jsUrls.add(abs);
+        } catch (e) {}
+      }
+
+      const discovered = Array.from(jsUrls);
+      console.log(`[DISCOVER] Found ${discovered.length} JS files`);
+
+      // Optionally fetch content for each file
+      let scripts = discovered.map(u => ({ url: u, filename: u.split('/').pop().split('?')[0] || 'script.js' }));
+
+      if (fetchContent && discovered.length > 0) {
+        console.log(`[DISCOVER] Fetching content for ${discovered.length} scripts...`);
+        const results = await Promise.allSettled(
+          discovered.map(async (jsUrl) => {
+            const ctrl = new AbortController();
+            const t = setTimeout(() => ctrl.abort(), 15000);
+            try {
+              const r = await fetch(jsUrl, {
+                signal: ctrl.signal,
+                headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36', 'Accept': '*/*' }
+              });
+              clearTimeout(t);
+              if (!r.ok) return { url: jsUrl, error: `HTTP ${r.status}` };
+              const text = await r.text();
+              return { url: jsUrl, content: text, size: text.length };
+            } catch (e) {
+              clearTimeout(t);
+              return { url: jsUrl, error: e.message };
+            }
+          })
+        );
+
+        scripts = results.map((r, i) => {
+          const base = { url: discovered[i], filename: discovered[i].split('/').pop().split('?')[0] || 'script.js' };
+          if (r.status === 'fulfilled' && r.value.content) {
+            return { ...base, content: r.value.content, size: r.value.size };
+          } else {
+            return { ...base, error: r.value?.error || r.reason?.message || 'Failed' };
+          }
+        });
+      }
+
+      return jsonResponse(res, 200, {
+        pageUrl: targetUrl,
+        totalFound: discovered.length,
+        scripts
+      });
+
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        return jsonResponse(res, 504, { error: 'Page timed out (30s)' });
+      }
+      console.error(`[DISCOVER] Error:`, err.message);
+      return jsonResponse(res, 502, { error: 'Crawl failed: ' + err.message });
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // /api/scan — Server-side analysis for large files
   // ═══════════════════════════════════════════════════════════
   if (req.method === 'POST' && url.pathname === '/api/scan') {

@@ -596,28 +596,85 @@
       throw new Error('All fetch strategies failed. Try downloading the file manually.');
     }
 
-    // ─── Fetch URL (single) ───
+    // ─── Fetch URL — Smart: detects HTML pages and discovers JS files ───
     const fetchUrlInput = document.getElementById('fetch-url-input');
     const fetchUrlBtn = document.getElementById('fetch-url-btn');
     if (fetchUrlBtn) {
       fetchUrlBtn.addEventListener('click', async () => {
         const url = fetchUrlInput.value.trim();
-        if (!url) { window.customAlert('Please enter a valid JavaScript file URL.'); return; }
+        if (!url) { window.customAlert('Please enter a URL (JS file or webpage).'); return; }
         const originalHTML = fetchUrlBtn.innerHTML;
         fetchUrlBtn.innerHTML = 'Fetching...';
         fetchUrlBtn.disabled = true;
         dropZone.classList.add('loading-pulse');
         try {
-          const text = await fetchWithProxy(url);
-          sourceBaseUrl = url;
-          codeInput.value = text;
-          updateLineNumbers();
-          const shortName = url.split('/').pop().split('?')[0] || 'remote_file.js';
-          fileNameDisplay.textContent = shortName;
-          await runAnalysis(text, shortName);
+          // Check if URL looks like a direct JS file
+          const isDirectJS = /\.js(\?|#|$)/i.test(url) || /\.mjs(\?|#|$)/i.test(url);
+
+          if (isDirectJS) {
+            // Direct JS file — fetch and analyze as before
+            const text = await fetchWithProxy(url);
+            sourceBaseUrl = url;
+            codeInput.value = text;
+            updateLineNumbers();
+            const shortName = url.split('/').pop().split('?')[0] || 'remote_file.js';
+            fileNameDisplay.textContent = shortName;
+            await runAnalysis(text, shortName);
+          } else {
+            // Looks like a page URL — discover all JS files on it
+            fetchUrlBtn.innerHTML = 'Discovering JS...';
+            const discoverResp = await fetch('/api/discover?url=' + encodeURIComponent(url) + '&fetch=true');
+            if (!discoverResp.ok) {
+              const err = await discoverResp.json().catch(() => ({}));
+              throw new Error(err.error || 'Discovery failed');
+            }
+            const data = await discoverResp.json();
+
+            if (!data.scripts || data.scripts.length === 0) {
+              window.customAlert('No JavaScript files found on this page.\n\nTry entering a direct .js file URL instead.');
+              return;
+            }
+
+            // Filter to scripts that have content
+            const loaded = data.scripts.filter(s => s.content && !s.error);
+            const failed = data.scripts.filter(s => s.error);
+
+            if (loaded.length === 0) {
+              window.customAlert('Found ' + data.totalFound + ' JS file(s), but could not fetch any.\n\nThe target may block automated requests.');
+              return;
+            }
+
+            // Combine all JS content for analysis
+            fetchUrlBtn.innerHTML = `Analyzing ${loaded.length} files...`;
+            sourceBaseUrl = url;
+
+            // Analyze each file individually and merge results
+            const allCode = [];
+            for (const script of loaded) {
+              allCode.push(`// ═══ ${script.filename} (${(script.size / 1024).toFixed(1)}KB) ═══\n${script.content}`);
+            }
+
+            const combinedCode = allCode.join('\n\n');
+            codeInput.value = combinedCode;
+            updateLineNumbers();
+            fileNameDisplay.textContent = `${loaded.length} files from ${new URL(url).hostname}`;
+
+            await runAnalysis(combinedCode, new URL(url).hostname + ' (bulk)');
+
+            // Show summary
+            let summary = `✅ Discovered ${data.totalFound} JS files\n✅ Fetched ${loaded.length} successfully`;
+            if (failed.length > 0) {
+              summary += `\n⚠ ${failed.length} failed to fetch`;
+            }
+            summary += '\n\nFiles analyzed:';
+            loaded.forEach(s => {
+              summary += `\n  • ${s.filename} (${(s.size / 1024).toFixed(1)}KB)`;
+            });
+            console.log(summary);
+          }
         } catch (e) {
           console.error('Fetch error:', e);
-          window.customAlert('Failed to fetch the URL.\n\nTry downloading the file manually and using drag & drop instead.');
+          window.customAlert('Failed to fetch: ' + e.message + '\n\nTry downloading the file manually and using drag & drop.');
         } finally {
           fetchUrlBtn.innerHTML = originalHTML;
           fetchUrlBtn.disabled = false;
