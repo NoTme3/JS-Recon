@@ -557,26 +557,43 @@
     fileInput.addEventListener('change', e => handleFiles(Array.from(e.target.files)));
 
     // ─── CORS-safe fetch helper ───
-    const FETCH_STRATEGIES = [
-      u => u,
-      u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-      u => `https://cors.eu.org/${u}`,
-      u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-      u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
-    ];
-
+    // Primary: our own backend proxy (local or Vercel)
+    // Fallback: public CORS proxies (unreliable but useful if backend is down)
     async function fetchWithProxy(url) {
-      let text = null, lastErr = null;
-      for (const fn of FETCH_STRATEGIES) {
+      // Strategy 1: Our backend CORS proxy (most reliable)
+      try {
+        const r = await fetch('/api/fetch?url=' + encodeURIComponent(url));
+        if (r.ok) {
+          const data = await r.json();
+          if (data.content) {
+            console.log(`[Fetch] ← ${data.size} bytes via backend proxy`);
+            return data.content;
+          }
+        }
+      } catch (e) {
+        console.warn('[Fetch] Backend proxy failed, trying fallbacks...', e.message);
+      }
+
+      // Strategy 2: Direct fetch (works if target has CORS headers)
+      try {
+        const r = await fetch(url);
+        if (r.ok) return await r.text();
+      } catch (e) {}
+
+      // Strategy 3: Public CORS proxies (last resort)
+      const PUBLIC_PROXIES = [
+        u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+        u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+        u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
+      ];
+      for (const fn of PUBLIC_PROXIES) {
         try {
           const r = await fetch(fn(url));
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          text = await r.text();
-          break;
-        } catch (err) { lastErr = err; continue; }
+          if (r.ok) return await r.text();
+        } catch (e) { continue; }
       }
-      if (text === null) throw lastErr;
-      return text;
+
+      throw new Error('All fetch strategies failed. Try downloading the file manually.');
     }
 
     // ─── Fetch URL (single) ───
