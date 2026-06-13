@@ -930,21 +930,51 @@
       try {
         await new Promise(r => setTimeout(r, 50)); // Let UI update
 
-        // Use worker for large files, main thread for small ones
-        if (text.length > WORKER_THRESHOLD) {
-          progressLabel.textContent = 'Analyzing (worker thread)...';
-          try {
-            GLOBAL_RESULTS = await analyzeWithWorker(text, fileName);
-          } catch (workerErr) {
-            // Fallback to main thread
-            console.log('[Worker] Fallback to main thread:', workerErr.message);
-            progressLabel.textContent = 'Analyzing (main thread)...';
+        let usedBackend = false;
+
+        // Strategy 1: Try server-side analysis (fastest, no UI freeze)
+        try {
+          progressLabel.textContent = 'Analyzing (server)...';
+          const resp = await fetch('/api/scan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: text, fileName })
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.results && data.totalFindings >= 0) {
+              // Map server results into GLOBAL_RESULTS
+              for (const [cat, items] of Object.entries(data.results)) {
+                if (Array.isArray(items) && items.length > 0) {
+                  if (!GLOBAL_RESULTS[cat]) GLOBAL_RESULTS[cat] = [];
+                  GLOBAL_RESULTS[cat].push(...items);
+                }
+              }
+              usedBackend = true;
+              console.log(`[Scan] Server-side: ${data.totalFindings} findings in ${data.analysisTime}ms`);
+            }
+          }
+        } catch (e) {
+          console.warn('[Scan] Backend unavailable, using client-side:', e.message);
+        }
+
+        // Strategy 2: Client-side fallback (Web Worker or main thread)
+        if (!usedBackend) {
+          if (text.length > WORKER_THRESHOLD) {
+            progressLabel.textContent = 'Analyzing (worker thread)...';
+            try {
+              GLOBAL_RESULTS = await analyzeWithWorker(text, fileName);
+            } catch (workerErr) {
+              console.log('[Worker] Fallback to main thread:', workerErr.message);
+              progressLabel.textContent = 'Analyzing (main thread)...';
+              const seenSets = JSA.createEmptySeen();
+              await analyzeFileContent(text, fileName, GLOBAL_RESULTS, seenSets, updateProgress);
+            }
+          } else {
+            progressLabel.textContent = 'Analyzing (client)...';
             const seenSets = JSA.createEmptySeen();
             await analyzeFileContent(text, fileName, GLOBAL_RESULTS, seenSets, updateProgress);
           }
-        } else {
-          const seenSets = JSA.createEmptySeen();
-          await analyzeFileContent(text, fileName, GLOBAL_RESULTS, seenSets, updateProgress);
         }
 
         // Fingerprint
