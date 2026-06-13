@@ -933,29 +933,40 @@
         let usedBackend = false;
 
         // Strategy 1: Try server-side analysis (fastest, no UI freeze)
-        try {
-          progressLabel.textContent = 'Analyzing (server)...';
-          const resp = await fetch('/api/scan', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code: text, fileName })
-          });
-          if (resp.ok) {
-            const data = await resp.json();
-            if (data.results && data.totalFindings >= 0) {
-              // Map server results into GLOBAL_RESULTS
-              for (const [cat, items] of Object.entries(data.results)) {
-                if (Array.isArray(items) && items.length > 0) {
-                  if (!GLOBAL_RESULTS[cat]) GLOBAL_RESULTS[cat] = [];
-                  GLOBAL_RESULTS[cat].push(...items);
+        // Vercel has a hard limit of 4.5MB for serverless functions.
+        // Sending >4MB payloads over the network takes too long and fails with 413.
+        // If the code is larger than 4MB, skip backend and go straight to worker.
+        const MAX_PAYLOAD_SIZE = 4 * 1024 * 1024; // 4MB
+        
+        if (text.length <= MAX_PAYLOAD_SIZE) {
+          try {
+            progressLabel.textContent = 'Analyzing (server)...';
+            const resp = await fetch('/api/scan', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ code: text, fileName })
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              if (data.results && data.totalFindings >= 0) {
+                // Map server results into GLOBAL_RESULTS
+                for (const [cat, items] of Object.entries(data.results)) {
+                  if (Array.isArray(items) && items.length > 0) {
+                    if (!GLOBAL_RESULTS[cat]) GLOBAL_RESULTS[cat] = [];
+                    GLOBAL_RESULTS[cat].push(...items);
+                  }
                 }
+                usedBackend = true;
+                console.log(`[Scan] Server-side: ${data.totalFindings} findings in ${data.analysisTime}ms`);
               }
-              usedBackend = true;
-              console.log(`[Scan] Server-side: ${data.totalFindings} findings in ${data.analysisTime}ms`);
+            } else if (resp.status === 413) {
+              console.warn('[Scan] Payload too large for Vercel, falling back to Web Worker.');
             }
+          } catch (e) {
+            console.warn('[Scan] Backend unavailable, using client-side:', e.message);
           }
-        } catch (e) {
-          console.warn('[Scan] Backend unavailable, using client-side:', e.message);
+        } else {
+          console.log(`[Scan] Code size (${(text.length/1024/1024).toFixed(1)}MB) exceeds Vercel 4MB limit. Bypassing backend.`);
         }
 
         // Strategy 2: Client-side fallback (Web Worker or main thread)
