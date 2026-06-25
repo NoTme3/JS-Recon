@@ -953,7 +953,10 @@
                 for (const [cat, items] of Object.entries(data.results)) {
                   if (Array.isArray(items) && items.length > 0) {
                     if (!GLOBAL_RESULTS[cat]) GLOBAL_RESULTS[cat] = [];
-                    GLOBAL_RESULTS[cat].push(...items);
+                    items.forEach(item => {
+                      item.contextMatch = escapeHtml(item.value);
+                      GLOBAL_RESULTS[cat].push(item);
+                    });
                   }
                 }
                 usedBackend = true;
